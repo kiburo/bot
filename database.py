@@ -1,107 +1,178 @@
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import json
+from datetime import datetime
 from typing import Optional, Dict, Any
-from config import DATABASE_URL
+import os
 
 class Database:
     def __init__(self, database_url: str = None):
-        self.database_url = database_url or DATABASE_URL
-        if not self.database_url:
-            raise ValueError("DATABASE_URL не указан. Установите переменную окружения DATABASE_URL")
+        self.database_url = database_url or os.getenv('DATABASE_URL', 'postgresql://localhost/bazi_bot')
         self.init_database()
     
-    def _get_connection(self):
-        """Получить подключение к базе данных"""
-        try:
-            return psycopg2.connect(self.database_url)
-        except psycopg2.Error as e:
-            raise ConnectionError(f"Ошибка подключения к базе данных: {e}")
+    def get_connection(self):
+        """Получить соединение с базой данных"""
+        return psycopg2.connect(self.database_url)
     
     def init_database(self):
         """Инициализация базы данных"""
-        conn = None
-        cursor = None
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor()
-            
-            # Таблица пользователей - только необходимые поля
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id BIGINT PRIMARY KEY,
-                    username VARCHAR(255),
-                    first_name VARCHAR(255),
-                    last_name VARCHAR(255),
-                    birth_date VARCHAR(255),
-                    contact_name VARCHAR(255),
-                    contact_email VARCHAR(255),
-                    contact_phone VARCHAR(255),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Таблица пользователей
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                user_id BIGINT PRIMARY KEY,
+                username VARCHAR(255),
+                first_name VARCHAR(255),
+                last_name VARCHAR(255),
+                contact_name VARCHAR(255),
+                contact_email VARCHAR(255),
+                contact_phone VARCHAR(255),
+                birth_date VARCHAR(255),
+                birth_time VARCHAR(255),
+                birth_city VARCHAR(255),
+                timezone VARCHAR(255),
+                bazi_data TEXT,
+                personality_type VARCHAR(255),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Добавляем новые колонки если их нет (для обновления существующих БД)
+        for column in ['contact_name', 'contact_email', 'contact_phone']:
+            cursor.execute(f'''
+                DO $$ 
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name='users' AND column_name='{column}'
+                    ) THEN
+                        ALTER TABLE users ADD COLUMN {column} VARCHAR(255);
+                    END IF;
+                END $$;
             ''')
-            
-            conn.commit()
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        
+        # Таблица сессий
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                user_id BIGINT,
+                step VARCHAR(255),
+                data TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (user_id)
+            )
+        ''')
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+    
+    def save_bazi_data(self, user_id: int, bazi_data: str):
+        """Сохранить данные БаЦзы для пользователя"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE users 
+            SET bazi_data = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = %s
+        ''', (bazi_data, user_id))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
     
     def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Получить данные пользователя"""
-        conn = None
-        cursor = None
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            
-            cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
-            row = cursor.fetchone()
-            
-            if row:
-                return dict(row)
-            return None
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        conn = self.get_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
+        row = cursor.fetchone()
+        
+        cursor.close()
+        conn.close()
+        
+        if row:
+            return dict(row)
+        return None
     
     def save_user(self, user_id: int, **kwargs):
         """Сохранить/обновить данные пользователя"""
-        conn = None
-        cursor = None
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor()
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Проверяем, существует ли пользователь
+        cursor.execute('SELECT user_id FROM users WHERE user_id = %s', (user_id,))
+        exists = cursor.fetchone()
+        
+        if exists:
+            # Обновляем существующего пользователя
+            set_clause = ', '.join([f"{key} = %s" for key in kwargs.keys()])
+            set_clause += ', updated_at = CURRENT_TIMESTAMP'
+            values = list(kwargs.values()) + [user_id]
             
-            # Проверяем, существует ли пользователь
-            cursor.execute('SELECT user_id FROM users WHERE user_id = %s', (user_id,))
-            exists = cursor.fetchone()
+            cursor.execute(f'UPDATE users SET {set_clause} WHERE user_id = %s', values)
+        else:
+            # Создаем нового пользователя
+            columns = ['user_id'] + list(kwargs.keys())
+            placeholders = ['%s'] * len(columns)
+            values = [user_id] + list(kwargs.values())
             
-            if exists:
-                # Обновляем существующего пользователя
-                set_clause = ', '.join([f"{key} = %s" for key in kwargs.keys()])
-                set_clause += ', updated_at = CURRENT_TIMESTAMP'
-                values = list(kwargs.values()) + [user_id]
-                
-                cursor.execute(f'UPDATE users SET {set_clause} WHERE user_id = %s', values)
-            else:
-                # Создаем нового пользователя
-                columns = ['user_id'] + list(kwargs.keys())
-                placeholders = ['%s'] * len(columns)
-                values = [user_id] + list(kwargs.values())
-                
-                cursor.execute(f'''
-                    INSERT INTO users ({', '.join(columns)})
-                    VALUES ({', '.join(placeholders)})
-                ''', values)
-            
-            conn.commit()
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+            cursor.execute(f'''
+                INSERT INTO users ({', '.join(columns)})
+                VALUES ({', '.join(placeholders)})
+            ''', values)
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
     
+    def save_session(self, user_id: int, step: str, data: Dict[str, Any]):
+        """Сохранить данные сессии"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Удаляем старые записи сессии для этого пользователя
+        cursor.execute('DELETE FROM user_sessions WHERE user_id = %s', (user_id,))
+        
+        # Сохраняем новую запись
+        cursor.execute('''
+            INSERT INTO user_sessions (user_id, step, data)
+            VALUES (%s, %s, %s)
+        ''', (user_id, step, json.dumps(data)))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+    
+    def get_session(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Получить данные сессии"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT step, data FROM user_sessions WHERE user_id = %s', (user_id,))
+        row = cursor.fetchone()
+        
+        cursor.close()
+        conn.close()
+        
+        if row:
+            return {
+                'step': row[0],
+                'data': json.loads(row[1])
+            }
+        return None
+    
+    def clear_session(self, user_id: int):
+        """Очистить данные сессии"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM user_sessions WHERE user_id = %s', (user_id,))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
