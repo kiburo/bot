@@ -15,10 +15,10 @@ from database import Database
 from simple_bazi_calculator import SimpleBaziCalculator
 from notion_integration import NotionIntegration
 from formulations_manager import FormulationsManager
-from config import NOTION_TOKEN, NOTION_DATABASE_ID
+from config import NOTION_TOKEN, NOTION_DATABASE_ID, DATABASE_URL
 
 # Инициализация базы данных и калькулятора
-db = Database()
+db = Database(DATABASE_URL)
 bazi_calc = SimpleBaziCalculator()
 notion_client = NotionIntegration(NOTION_TOKEN, NOTION_DATABASE_ID)
 formulations = FormulationsManager()
@@ -2127,6 +2127,10 @@ async def _calculate_and_send_bazi(message: Message, birth_date: str, birth_time
     try:
         # Рассчитываем БаЦзы
         result = bazi_calc.calculate_bazi(birth_date, birth_time, birth_city)
+        
+        # Сохраняем результат в базе данных
+        user_id = message.from_user.id
+        db.save_bazi_data(user_id, str(result))
         
         # Отправляем результат пошагово
         await _send_bazi_result_step_by_step(message, result)
