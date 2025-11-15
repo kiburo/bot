@@ -100,21 +100,54 @@ class SimpleBaziCalculator:
                 day_stem_char = all_stems[0]
                 print(f"🔍 Найден небесный ствол дня (метод 2, единственный): {day_stem_char}")
         
-        # Метод 3: Ищем в структуре таблицы (td, div, span)
+        # Метод 3: Ищем в структуре таблицы (td, div, span) с увеличенным контекстом
         if not day_stem_char:
-            # Ищем после слова ДЕНЬ в пределах 500 символов
-            day_context = re.search(r'ДЕНЬ.{0,500}', html_content, re.IGNORECASE | re.DOTALL)
+            # Ищем после слова ДЕНЬ в пределах 2000 символов
+            day_context = re.search(r'ДЕНЬ.{0,2000}', html_content, re.IGNORECASE | re.DOTALL)
             if day_context:
                 stem_in_context = re.search(r'([甲乙丙丁戊己庚辛壬癸])', day_context.group(0))
                 if stem_in_context:
                     day_stem_char = stem_in_context.group(1)
                     print(f"🔍 Найден небесный ствол дня (метод 3, в контексте): {day_stem_char}")
         
+        # Метод 4: Ищем в структуре таблицы по тегам
+        if not day_stem_char:
+            # Ищем паттерн: <td> или <div> с иероглифом после "ДЕНЬ"
+            table_patterns = [
+                r'ДЕНЬ[^>]*>.*?([甲乙丙丁戊己庚辛壬癸])',  # ДЕНЬ в теге и затем иероглиф
+                r'<td[^>]*>.*?ДЕНЬ.*?([甲乙丙丁戊己庚辛壬癸])',  # td с ДЕНЬ и иероглифом
+                r'<div[^>]*>.*?ДЕНЬ.*?([甲乙丙丁戊己庚辛壬癸])',  # div с ДЕНЬ и иероглифом
+            ]
+            for pattern in table_patterns:
+                match = re.search(pattern, html_content, re.IGNORECASE | re.DOTALL)
+                if match:
+                    day_stem_char = match.group(1)
+                    print(f"🔍 Найден небесный ствол дня (метод 4, в таблице): {day_stem_char}")
+                    break
+        
+        # Метод 5: Если все еще не нашли, ищем любой иероглиф небесного ствола в HTML
+        if not day_stem_char:
+            all_stems = re.findall(r'([甲乙丙丁戊己庚辛壬癸])', html_content)
+            if all_stems:
+                # Берем средний (обычно это день в структуре: год, месяц, день, час)
+                idx = len(all_stems) // 2 if len(all_stems) > 2 else 1
+                day_stem_char = all_stems[idx] if idx < len(all_stems) else all_stems[0]
+                print(f"🔍 Найден небесный ствол дня (метод 5, средний из {len(all_stems)} найденных): {day_stem_char}")
+        
         # Определяем элемент и полярность
         if not day_stem_char or day_stem_char not in self.heavenly_stems:
-            # Отладочный вывод: показываем первые 1000 символов HTML для диагностики
-            debug_snippet = html_content[:1000] if len(html_content) > 1000 else html_content
-            print(f"❌ Отладочная информация (первые 1000 символов HTML):\n{debug_snippet}")
+            # Отладочный вывод: показываем количество найденных иероглифов
+            all_stems_found = re.findall(r'([甲乙丙丁戊己庚辛壬癸])', html_content)
+            all_branches_found = re.findall(r'([子丑寅卯辰巳午未申酉戌亥])', html_content)
+            print(f"❌ Отладочная информация:")
+            print(f"   Найдено небесных стволов: {len(all_stems_found)} - {all_stems_found}")
+            print(f"   Найдено земных ветвей: {len(all_branches_found)} - {all_branches_found}")
+            print(f"   Длина HTML: {len(html_content)} символов")
+            # Показываем фрагмент где есть иероглифы
+            if all_stems_found:
+                stem_pos = html_content.find(all_stems_found[0])
+                debug_snippet = html_content[max(0, stem_pos-200):stem_pos+200] if stem_pos > 0 else html_content[:400]
+                print(f"   Фрагмент HTML с иероглифами:\n{debug_snippet}")
             raise ValueError(f"Не удалось найти небесный ствол дня в HTML ответе от mingli.ru")
         
         element_info = self.heavenly_stems[day_stem_char]
