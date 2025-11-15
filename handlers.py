@@ -15,10 +15,10 @@ from database import Database
 from simple_bazi_calculator import SimpleBaziCalculator
 from notion_integration import NotionIntegration
 from formulations_manager import FormulationsManager
-from config import NOTION_TOKEN, NOTION_DATABASE_ID, DATABASE_URL
+from config import NOTION_TOKEN, NOTION_DATABASE_ID
 
 # Инициализация базы данных и калькулятора
-db = Database(DATABASE_URL)
+db = Database()
 bazi_calc = SimpleBaziCalculator()
 notion_client = NotionIntegration(NOTION_TOKEN, NOTION_DATABASE_ID)
 formulations = FormulationsManager()
