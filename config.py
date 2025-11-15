@@ -7,7 +7,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 # Настройки для БаЦзы
-TIMEZONE_DEFAULT = 'Europe/Kiev'
+TIMEZONE_DEFAULT = 'Europe/Moscow'
 
 # Настройки для Notion
 NOTION_TOKEN = os.getenv('NOTION_TOKEN')
