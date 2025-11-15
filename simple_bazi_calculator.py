@@ -8,7 +8,7 @@ from typing import Dict, Optional
 
 class SimpleBaziCalculator:
     def __init__(self):
-        self.base_url = "https://www.mingli.ru/calculator/"
+        self.base_url = "https://www.mingli.ru"
         
         # Словарь китайских иероглифов и их элементов/полярности
         self.heavenly_stems = {
@@ -36,90 +36,193 @@ class SimpleBaziCalculator:
         Расчет БаЦзы через mingli.ru
         Извлекает элемент личности из колонки "ДЕНЬ", верхняя клеточка
         """
-        try:
-            print("🌐 Подключение к mingli.ru...")
-            
-            # Формируем URL для запроса к mingli.ru
-            # Используем пример URL из вашего сообщения как основу
-            url = "https://www.mingli.ru/calculator/MXwxfNCY0LfQvNCw0LjQu3wyODE2fDMuMHw0NS4zNTAxOTQ0fDI4Ljg1MDE5MTl8MTl8NDB8MTF8NXwxOTgxfHx8fHx8fHx8dW5kZWZpbmVkfDJ8NzA3MzA4fENoSUpIMVpCOS1SbHQwQVJmV0p5N0MzWW1yMHxFdXJvcGUvS2lldnwxfDE="
-            
-            # Отправляем GET запрос с уменьшенным таймаутом
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            
-            print("✅ Успешно получен ответ от mingli.ru")
-            # Парсим HTML ответ
-            return self._parse_response(response.text, birth_date, birth_time, birth_city)
-            
-        except requests.exceptions.ConnectTimeout:
-            print("⏰ Таймаут подключения к mingli.ru (10 сек)")
-            print("🔄 Используем fallback расчет...")
-            return self._fallback_calculation(birth_date, birth_time, birth_city)
-        except requests.exceptions.ConnectionError as e:
-            print(f"🔌 Ошибка подключения к mingli.ru: {e}")
-            print("🔄 Используем fallback расчет...")
-            return self._fallback_calculation(birth_date, birth_time, birth_city)
-        except Exception as e:
-            print(f"❌ Ошибка при расчете БаЦзы через mingli.ru: {e}")
-            print("🔄 Используем fallback расчет...")
-            return self._fallback_calculation(birth_date, birth_time, birth_city)
+        import time
+        
+        # Парсим дату и время
+        day, month, year = birth_date.split('.')
+        hour, minute = birth_time.split(':')
+        
+        # Подготавливаем данные для отправки POST запроса
+        form_data = {
+            'name': '',  # Имя не обязательно
+            'sex': 'Жен',  # По умолчанию, можно сделать параметром
+            'place': birth_city,
+            'year': year,
+            'month': month,
+            'day': day,
+            'hour': hour,
+            'minute': minute
+        }
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        # Retry механизм: до 5 попыток
+        max_retries = 5
+        retry_delay = 2  # секунды между попытками
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                print(f"🌐 Подключение к mingli.ru (попытка {attempt}/{max_retries})...")
+                
+                # Отправляем POST запрос с правильными параметрами
+                response = requests.post(self.base_url, data=form_data, headers=headers, timeout=15)
+                response.raise_for_status()
+                
+                print("✅ Успешно получен ответ от mingli.ru")
+                # Парсим HTML ответ
+                result = self._parse_response(response.text, birth_date, birth_time, birth_city)
+                
+                # Проверяем, что парсинг прошел успешно
+                if result and result.get('element') and result.get('year_animal'):
+                    return result
+                else:
+                    raise ValueError("Парсинг не вернул полные данные")
+                    
+            except requests.exceptions.ConnectTimeout:
+                if attempt < max_retries:
+                    print(f"⏰ Таймаут подключения к mingli.ru. Повтор через {retry_delay} сек...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 1.5  # Увеличиваем задержку
+                else:
+                    raise Exception("Не удалось подключиться к mingli.ru после всех попыток (таймаут)")
+                    
+            except requests.exceptions.ConnectionError as e:
+                if attempt < max_retries:
+                    print(f"🔌 Ошибка подключения к mingli.ru: {e}. Повтор через {retry_delay} сек...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 1.5
+                else:
+                    raise Exception(f"Не удалось подключиться к mingli.ru после всех попыток: {e}")
+                    
+            except requests.exceptions.HTTPError as e:
+                if attempt < max_retries:
+                    print(f"❌ HTTP ошибка: {e}. Повтор через {retry_delay} сек...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 1.5
+                else:
+                    raise Exception(f"HTTP ошибка от mingli.ru после всех попыток: {e}")
+                    
+            except ValueError as e:
+                if attempt < max_retries:
+                    print(f"⚠️ Ошибка парсинга: {e}. Повтор через {retry_delay} сек...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 1.5
+                else:
+                    raise Exception(f"Не удалось распарсить ответ от mingli.ru после всех попыток: {e}")
+                    
+            except Exception as e:
+                if attempt < max_retries:
+                    print(f"❌ Ошибка при расчете БаЦзы: {e}. Повтор через {retry_delay} сек...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 1.5
+                else:
+                    raise Exception(f"Ошибка при расчете БаЦзы через mingli.ru после всех попыток: {e}")
+        
+        # Этот код не должен выполниться, но на всякий случай
+        raise Exception("Не удалось получить данные от mingli.ru")
     
     def _parse_response(self, html_content: str, birth_date: str, birth_time: str, birth_city: str) -> Dict:
         """Парсинг HTML ответа от mingli.ru"""
-        try:
-            # Ищем колонку "ДЕНЬ" и извлекаем верхнюю клеточку (небесный ствол)
-            day_pattern = r'ДЕНЬ.*?<td[^>]*>([^<]+)</td>'
-            day_match = re.search(day_pattern, html_content, re.IGNORECASE | re.DOTALL)
-            
+        if not html_content or len(html_content) < 100:
+            raise ValueError("Получен пустой или слишком короткий ответ от mingli.ru")
+        
+        # Ищем колонку "ДЕНЬ" и извлекаем верхнюю клеточку (небесный ствол)
+        # Пробуем несколько вариантов паттернов
+        day_patterns = [
+            r'ДЕНЬ.*?<td[^>]*>([^<]+)</td>',
+            r'ДЕНЬ[^<]*<td[^>]*>([^<]+)</td>',
+            r'ДЕНЬ.*?<td[^>]*>\s*([^<]+)\s*</td>',
+            r'<td[^>]*>ДЕНЬ</td>.*?<td[^>]*>([^<]+)</td>',
+        ]
+        
+        day_stem_char = None
+        for pattern in day_patterns:
+            day_match = re.search(pattern, html_content, re.IGNORECASE | re.DOTALL)
             if day_match:
                 day_stem_char = day_match.group(1).strip()
-                
-                # Определяем элемент и полярность
+                # Проверяем, что это китайский иероглиф
                 if day_stem_char in self.heavenly_stems:
-                    element_info = self.heavenly_stems[day_stem_char]
-                    element = element_info['element']
-                    polarity = element_info['polarity']
-                else:
-                    # Fallback если иероглиф не найден
-                    element = "Дерево"
-                    polarity = "Ян"
-            else:
-                # Fallback если колонка не найдена
-                element = "Дерево"
-                polarity = "Ян"
-                day_stem_char = "甲"
-            
-            # Ищем животное года
-            year_pattern = r'ГОД.*?<td[^>]*>([^<]+)</td>'
-            year_match = re.search(year_pattern, html_content, re.IGNORECASE | re.DOTALL)
-            
+                    break
+                day_stem_char = None
+        
+        if not day_stem_char or day_stem_char not in self.heavenly_stems:
+            # Пробуем найти любой китайский иероглиф из нашего словаря в таблице
+            for char in self.heavenly_stems.keys():
+                if char in html_content:
+                    # Проверяем контекст вокруг иероглифа
+                    char_index = html_content.find(char)
+                    context = html_content[max(0, char_index-200):min(len(html_content), char_index+200)]
+                    if 'ДЕНЬ' in context.upper() or 'день' in context.lower():
+                        day_stem_char = char
+                        break
+        
+        if not day_stem_char or day_stem_char not in self.heavenly_stems:
+            raise ValueError(f"Не удалось найти небесный ствол дня в ответе от mingli.ru. HTML длина: {len(html_content)}")
+        
+        # Определяем элемент и полярность
+        element_info = self.heavenly_stems[day_stem_char]
+        element = element_info['element']
+        polarity = element_info['polarity']
+        
+        # Ищем животное года
+        year_patterns = [
+            r'ГОД.*?<td[^>]*>([^<]+)</td>',
+            r'ГОД[^<]*<td[^>]*>([^<]+)</td>',
+            r'ГОД.*?<td[^>]*>\s*([^<]+)\s*</td>',
+            r'<td[^>]*>ГОД</td>.*?<td[^>]*>([^<]+)</td>',
+        ]
+        
+        year_branch_char = None
+        for pattern in year_patterns:
+            year_match = re.search(pattern, html_content, re.IGNORECASE | re.DOTALL)
             if year_match:
                 year_branch_char = year_match.group(1).strip()
-                year_animal = self.year_animals.get(year_branch_char, "Крыса")
-            else:
-                year_animal = "Крыса"
-                year_branch_char = "子"
-            
-            # Получаем описание личности
-            personality_desc = self._get_personality_description(element, polarity)
-            
-            return {
-                'element': element,
-                'polarity': polarity,
-                'year_animal': year_animal,
-                'day_stem_char': day_stem_char,
-                'year_branch_char': year_branch_char,
-                'birth_date': birth_date,
-                'birth_time': birth_time,
-                'birth_city': birth_city,
-                'personality': personality_desc,
-                'monthly_advice': self._get_monthly_advice(element, polarity),
-                'summary_2025': self._get_summary_2025(element, polarity)
-            }
-            
-        except Exception as e:
-            print(f"Ошибка парсинга: {e}")
-            return self._fallback_calculation(birth_date, birth_time, birth_city)
+                if year_branch_char in self.year_animals:
+                    break
+                year_branch_char = None
+        
+        if not year_branch_char or year_branch_char not in self.year_animals:
+            # Пробуем найти любое животное года в таблице
+            for char in self.year_animals.keys():
+                if char in html_content:
+                    char_index = html_content.find(char)
+                    context = html_content[max(0, char_index-200):min(len(html_content), char_index+200)]
+                    if 'ГОД' in context.upper() or 'год' in context.lower():
+                        year_branch_char = char
+                        break
+        
+        if not year_branch_char or year_branch_char not in self.year_animals:
+            # Если не нашли, вычисляем по году рождения
+            day, month, year = map(int, birth_date.split('.'))
+            year_animal = self._get_year_animal(year)
+            # Находим соответствующий иероглиф
+            for char, animal in self.year_animals.items():
+                if animal == year_animal:
+                    year_branch_char = char
+                    break
+            if not year_branch_char:
+                raise ValueError(f"Не удалось определить животное года")
+        else:
+            year_animal = self.year_animals[year_branch_char]
+        
+        # Получаем описание личности
+        personality_desc = self._get_personality_description(element, polarity)
+        
+        return {
+            'element': element,
+            'polarity': polarity,
+            'year_animal': year_animal,
+            'day_stem_char': day_stem_char,
+            'year_branch_char': year_branch_char,
+            'birth_date': birth_date,
+            'birth_time': birth_time,
+            'birth_city': birth_city,
+            'personality': personality_desc,
+            'monthly_advice': self._get_monthly_advice(element, polarity),
+            'summary_2025': self._get_summary_2025(element, polarity)
+        }
     
     def _get_personality_description(self, element: str, polarity: str) -> Dict:
         """Получение описания личности согласно Google Sheets"""
