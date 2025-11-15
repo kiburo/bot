@@ -8,7 +8,7 @@ from typing import Dict, Optional
 
 class SimpleBaziCalculator:
     def __init__(self):
-        self.base_url = "https://www.mingli.ru/calculator/"
+        self.base_url = "https://www.mingli.ru"
         
         # Словарь китайских иероглифов и их элементов/полярности
         self.heavenly_stems = {
@@ -38,12 +38,27 @@ class SimpleBaziCalculator:
         """
         print("🌐 Подключение к mingli.ru...")
         
-        # Формируем URL для запроса к mingli.ru
-        # Используем пример URL из вашего сообщения как основу
-        url = "https://www.mingli.ru/calculator/MXwxfNCY0LfQvNCw0LjQu3wyODE2fDMuMHw0NS4zNTAxOTQ0fDI4Ljg1MDE5MTl8MTl8NDB8MTF8NXwxOTgxfHx8fHx8fHx8dW5kZWZpbmVkfDJ8NzA3MzA4fENoSUpIMVpCOS1SbHQwQVJmV0p5N0MzWW1yMHxFdXJvcGUvS2lldnwxfDE="
+        # Парсим дату и время
+        day, month, year = birth_date.split('.')
+        hour, minute = birth_time.split(':')
         
-        # Отправляем GET запрос с уменьшенным таймаутом
-        response = requests.get(url, timeout=10)
+        # Подготавливаем данные для отправки POST запросом
+        form_data = {
+            'name': '',  # Имя не обязательно
+            'sex': 'Жен',  # По умолчанию, можно сделать параметром
+            'place': birth_city,
+            'year': year,
+            'month': month,
+            'day': day,
+            'hour': hour,
+            'minute': minute
+        }
+        
+        # Отправляем POST запрос к mingli.ru с заголовками браузера
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.post(self.base_url, data=form_data, headers=headers, timeout=10)
         response.raise_for_status()
         
         print("✅ Успешно получен ответ от mingli.ru")
