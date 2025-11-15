@@ -29,9 +29,6 @@ class Database:
                 username VARCHAR(255),
                 first_name VARCHAR(255),
                 last_name VARCHAR(255),
-                contact_name VARCHAR(255),
-                contact_email VARCHAR(255),
-                contact_phone VARCHAR(255),
                 birth_date VARCHAR(255),
                 birth_time VARCHAR(255),
                 birth_city VARCHAR(255),
@@ -42,29 +39,30 @@ class Database:
                 updated_at TIMESTAMP DEFAULT NOW()
             )
         ''')
+        conn.commit()  # Коммитим создание таблицы
         
         # Добавляем новые колонки если их нет (для обновления существующих БД)
         # Используем отдельные транзакции для каждого ALTER TABLE
         try:
             cursor.execute('ALTER TABLE users ADD COLUMN contact_name VARCHAR(255)')
             conn.commit()
-        except errors.DuplicateColumn:
+        except (errors.DuplicateColumn, errors.UndefinedTable):
             conn.rollback()  # Откатываем транзакцию после ошибки
-            pass  # Колонка уже существует
+            pass  # Колонка уже существует или таблица не существует
         
         try:
             cursor.execute('ALTER TABLE users ADD COLUMN contact_email VARCHAR(255)')
             conn.commit()
-        except errors.DuplicateColumn:
+        except (errors.DuplicateColumn, errors.UndefinedTable):
             conn.rollback()  # Откатываем транзакцию после ошибки
-            pass  # Колонка уже существует
+            pass  # Колонка уже существует или таблица не существует
         
         try:
             cursor.execute('ALTER TABLE users ADD COLUMN contact_phone VARCHAR(255)')
             conn.commit()
-        except errors.DuplicateColumn:
+        except (errors.DuplicateColumn, errors.UndefinedTable):
             conn.rollback()  # Откатываем транзакцию после ошибки
-            pass  # Колонка уже существует
+            pass  # Колонка уже существует или таблица не существует
         
         # Таблица сессий
         cursor.execute('''
