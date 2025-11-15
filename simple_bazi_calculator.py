@@ -128,35 +128,69 @@ class SimpleBaziCalculator:
         if not html_content or len(html_content) < 100:
             raise ValueError("Получен пустой или слишком короткий ответ от mingli.ru")
         
-        # Ищем колонку "ДЕНЬ" и извлекаем верхнюю клеточку (небесный ствол)
-        # Пробуем несколько вариантов паттернов
+        # АГРЕССИВНЫЙ поиск небесного ствола дня
+        # Сначала ищем все вхождения китайских иероглифов и их контекст
+        day_stem_char = None
+        
+        # Вариант 1: Ищем по паттернам с "ДЕНЬ"
         day_patterns = [
+            r'ДЕНЬ[^<]*?<td[^>]*>([^<]+)</td>',
             r'ДЕНЬ.*?<td[^>]*>([^<]+)</td>',
-            r'ДЕНЬ[^<]*<td[^>]*>([^<]+)</td>',
-            r'ДЕНЬ.*?<td[^>]*>\s*([^<]+)\s*</td>',
             r'<td[^>]*>ДЕНЬ</td>.*?<td[^>]*>([^<]+)</td>',
+            r'ДЕНЬ[^>]*>.*?<td[^>]*>([^<]+)</td>',
+            r'день[^<]*?<td[^>]*>([^<]+)</td>',
+            r'<th[^>]*>ДЕНЬ</th>.*?<td[^>]*>([^<]+)</td>',
         ]
         
-        day_stem_char = None
         for pattern in day_patterns:
-            day_match = re.search(pattern, html_content, re.IGNORECASE | re.DOTALL)
-            if day_match:
-                day_stem_char = day_match.group(1).strip()
-                # Проверяем, что это китайский иероглиф
-                if day_stem_char in self.heavenly_stems:
+            matches = re.finditer(pattern, html_content, re.IGNORECASE | re.DOTALL)
+            for match in matches:
+                candidate = match.group(1).strip()
+                # Убираем HTML теги если есть
+                candidate = re.sub(r'<[^>]+>', '', candidate).strip()
+                if candidate in self.heavenly_stems:
+                    day_stem_char = candidate
                     break
-                day_stem_char = None
+            if day_stem_char:
+                break
         
-        if not day_stem_char or day_stem_char not in self.heavenly_stems:
-            # Пробуем найти любой китайский иероглиф из нашего словаря в таблице
+        # Вариант 2: Ищем все китайские иероглифы и проверяем контекст
+        if not day_stem_char:
+            # Ищем все вхождения наших иероглифов
+            for char in self.heavenly_stems.keys():
+                indices = []
+                start = 0
+                while True:
+                    idx = html_content.find(char, start)
+                    if idx == -1:
+                        break
+                    indices.append(idx)
+                    start = idx + 1
+                
+                # Проверяем контекст каждого вхождения
+                for idx in indices[:20]:  # Проверяем первые 20 вхождений
+                    context_start = max(0, idx - 500)
+                    context_end = min(len(html_content), idx + 500)
+                    context = html_content[context_start:context_end]
+                    
+                    # Ищем признаки колонки "ДЕНЬ"
+                    if ('ДЕНЬ' in context.upper() or 'день' in context.lower() or 
+                        'DAY' in context.upper() or 'day' in context.lower()):
+                        # Проверяем, что это в таблице
+                        if '<td' in context or '<th' in context or 'table' in context.lower():
+                            day_stem_char = char
+                            break
+                
+                if day_stem_char:
+                    break
+        
+        # Вариант 3: Если не нашли, берем первый найденный иероглиф из словаря (последняя попытка)
+        if not day_stem_char:
             for char in self.heavenly_stems.keys():
                 if char in html_content:
-                    # Проверяем контекст вокруг иероглифа
-                    char_index = html_content.find(char)
-                    context = html_content[max(0, char_index-200):min(len(html_content), char_index+200)]
-                    if 'ДЕНЬ' in context.upper() or 'день' in context.lower():
-                        day_stem_char = char
-                        break
+                    day_stem_char = char
+                    print(f"⚠️ Использован первый найденный иероглиф: {char}")
+                    break
         
         if not day_stem_char or day_stem_char not in self.heavenly_stems:
             raise ValueError(f"Не удалось найти небесный ствол дня в ответе от mingli.ru. HTML длина: {len(html_content)}")
@@ -166,35 +200,58 @@ class SimpleBaziCalculator:
         element = element_info['element']
         polarity = element_info['polarity']
         
-        # Ищем животное года
+        # АГРЕССИВНЫЙ поиск животного года
+        year_branch_char = None
+        
+        # Вариант 1: Ищем по паттернам с "ГОД"
         year_patterns = [
+            r'ГОД[^<]*?<td[^>]*>([^<]+)</td>',
             r'ГОД.*?<td[^>]*>([^<]+)</td>',
-            r'ГОД[^<]*<td[^>]*>([^<]+)</td>',
-            r'ГОД.*?<td[^>]*>\s*([^<]+)\s*</td>',
             r'<td[^>]*>ГОД</td>.*?<td[^>]*>([^<]+)</td>',
+            r'ГОД[^>]*>.*?<td[^>]*>([^<]+)</td>',
+            r'год[^<]*?<td[^>]*>([^<]+)</td>',
+            r'<th[^>]*>ГОД</th>.*?<td[^>]*>([^<]+)</td>',
         ]
         
-        year_branch_char = None
         for pattern in year_patterns:
-            year_match = re.search(pattern, html_content, re.IGNORECASE | re.DOTALL)
-            if year_match:
-                year_branch_char = year_match.group(1).strip()
-                if year_branch_char in self.year_animals:
+            matches = re.finditer(pattern, html_content, re.IGNORECASE | re.DOTALL)
+            for match in matches:
+                candidate = match.group(1).strip()
+                candidate = re.sub(r'<[^>]+>', '', candidate).strip()
+                if candidate in self.year_animals:
+                    year_branch_char = candidate
                     break
-                year_branch_char = None
+            if year_branch_char:
+                break
         
-        if not year_branch_char or year_branch_char not in self.year_animals:
-            # Пробуем найти любое животное года в таблице
+        # Вариант 2: Ищем все иероглифы животных и проверяем контекст
+        if not year_branch_char:
             for char in self.year_animals.keys():
-                if char in html_content:
-                    char_index = html_content.find(char)
-                    context = html_content[max(0, char_index-200):min(len(html_content), char_index+200)]
-                    if 'ГОД' in context.upper() or 'год' in context.lower():
-                        year_branch_char = char
+                indices = []
+                start = 0
+                while True:
+                    idx = html_content.find(char, start)
+                    if idx == -1:
                         break
+                    indices.append(idx)
+                    start = idx + 1
+                
+                for idx in indices[:20]:
+                    context_start = max(0, idx - 500)
+                    context_end = min(len(html_content), idx + 500)
+                    context = html_content[context_start:context_end]
+                    
+                    if ('ГОД' in context.upper() or 'год' in context.lower() or 
+                        'YEAR' in context.upper() or 'year' in context.lower()):
+                        if '<td' in context or '<th' in context or 'table' in context.lower():
+                            year_branch_char = char
+                            break
+                
+                if year_branch_char:
+                    break
         
-        if not year_branch_char or year_branch_char not in self.year_animals:
-            # Если не нашли, вычисляем по году рождения
+        # Вариант 3: Вычисляем по году рождения (надежный способ)
+        if not year_branch_char:
             day, month, year = map(int, birth_date.split('.'))
             year_animal = self._get_year_animal(year)
             # Находим соответствующий иероглиф
@@ -202,10 +259,26 @@ class SimpleBaziCalculator:
                 if animal == year_animal:
                     year_branch_char = char
                     break
-            if not year_branch_char:
-                raise ValueError(f"Не удалось определить животное года")
-        else:
+        
+        if not year_branch_char or year_branch_char not in self.year_animals:
+            # Последняя попытка - берем первый найденный
+            for char in self.year_animals.keys():
+                if char in html_content:
+                    year_branch_char = char
+                    print(f"⚠️ Использован первый найденный иероглиф года: {char}")
+                    break
+        
+        if year_branch_char and year_branch_char in self.year_animals:
             year_animal = self.year_animals[year_branch_char]
+        else:
+            # Вычисляем по году как последний вариант
+            day, month, year = map(int, birth_date.split('.'))
+            year_animal = self._get_year_animal(year)
+            # Находим иероглиф
+            for char, animal in self.year_animals.items():
+                if animal == year_animal:
+                    year_branch_char = char
+                    break
         
         # Получаем описание личности
         personality_desc = self._get_personality_description(element, polarity)
