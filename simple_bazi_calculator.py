@@ -67,27 +67,90 @@ class SimpleBaziCalculator:
     def _parse_response(self, html_content: str, birth_date: str, birth_time: str, birth_city: str) -> Dict:
         """Парсинг HTML ответа от mingli.ru"""
         try:
-            # Ищем колонку "ДЕНЬ" и извлекаем верхнюю клеточку (небесный ствол)
-            day_pattern = r'ДЕНЬ.*?<td[^>]*>([^<]+)</td>'
+            # Ищем колонку "ДЕНЬ" и извлекаем первый китайский иероглиф (небесный ствол)
+            # Ищем паттерн: ДЕНЬ, затем первый td с китайским иероглифом из небесных стволов
+            day_pattern = r'ДЕНЬ.*?<td[^>]*>([甲-癸])'
             day_match = re.search(day_pattern, html_content, re.IGNORECASE | re.DOTALL)
             
             if day_match:
                 day_stem_char = day_match.group(1).strip()
+                print(f"🔍 Найден иероглиф из парсинга: {day_stem_char}")
                 
                 # Определяем элемент и полярность
                 if day_stem_char in self.heavenly_stems:
                     element_info = self.heavenly_stems[day_stem_char]
                     element = element_info['element']
                     polarity = element_info['polarity']
+                    print(f"✅ Определен элемент: {element} {polarity}")
                 else:
-                    # Fallback если иероглиф не найден
-                    element = "Дерево"
-                    polarity = "Ян"
+                    # Иероглиф не из списка небесных стволов - используем fallback расчет
+                    print(f"⚠️ Иероглиф {day_stem_char} не найден в списке небесных стволов, используем расчет по дате")
+                    try:
+                        date_parts = birth_date.split('.')
+                        if len(date_parts) == 3:
+                            day = int(date_parts[0])
+                            month = int(date_parts[1])
+                            year = int(date_parts[2])
+                            element, polarity, day_stem_char = self._calculate_day_stem(day, month, year)
+                            print(f"✅ Fallback расчет: {element} {polarity} ({day_stem_char})")
+                        else:
+                            element = "Дерево"
+                            polarity = "Ян"
+                            day_stem_char = "甲"
+                    except Exception as e:
+                        print(f"❌ Ошибка в fallback расчете: {e}")
+                        element = "Дерево"
+                        polarity = "Ян"
             else:
-                # Fallback если колонка не найдена
-                element = "Дерево"
-                polarity = "Ян"
-                day_stem_char = "甲"
+                # Пробуем альтернативный паттерн - ищем таблицу и первую ячейку в колонке ДЕНЬ
+                table_pattern = r'<tr[^>]*>.*?ДЕНЬ.*?</tr>.*?<tr[^>]*>.*?<td[^>]*>([甲-癸])'
+                table_match = re.search(table_pattern, html_content, re.IGNORECASE | re.DOTALL)
+                
+                if table_match:
+                    day_stem_char = table_match.group(1).strip()
+                    print(f"🔍 Найден иероглиф из альтернативного паттерна: {day_stem_char}")
+                    if day_stem_char in self.heavenly_stems:
+                        element_info = self.heavenly_stems[day_stem_char]
+                        element = element_info['element']
+                        polarity = element_info['polarity']
+                        print(f"✅ Определен элемент: {element} {polarity}")
+                    else:
+                        # Иероглиф не из списка - используем fallback расчет
+                        print(f"⚠️ Иероглиф {day_stem_char} не найден, используем расчет по дате")
+                        try:
+                            date_parts = birth_date.split('.')
+                            if len(date_parts) == 3:
+                                day = int(date_parts[0])
+                                month = int(date_parts[1])
+                                year = int(date_parts[2])
+                                element, polarity, day_stem_char = self._calculate_day_stem(day, month, year)
+                                print(f"✅ Fallback расчет: {element} {polarity} ({day_stem_char})")
+                            else:
+                                element = "Дерево"
+                                polarity = "Ян"
+                                day_stem_char = "甲"
+                        except Exception as e:
+                            print(f"❌ Ошибка в fallback расчете: {e}")
+                            element = "Дерево"
+                            polarity = "Ян"
+                else:
+                    # Fallback если колонка не найдена - используем расчет по дате
+                    try:
+                        # Парсим дату для расчета
+                        date_parts = birth_date.split('.')
+                        if len(date_parts) == 3:
+                            day = int(date_parts[0])
+                            month = int(date_parts[1])
+                            year = int(date_parts[2])
+                            element, polarity, day_stem_char = self._calculate_day_stem(day, month, year)
+                        else:
+                            element = "Дерево"
+                            polarity = "Ян"
+                            day_stem_char = "甲"
+                    except:
+                        element = "Дерево"
+                        polarity = "Ян"
+                        day_stem_char = "甲"
             
             # Ищем животное года
             year_pattern = r'ГОД.*?<td[^>]*>([^<]+)</td>'
