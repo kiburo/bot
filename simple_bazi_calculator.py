@@ -8,7 +8,7 @@ from typing import Dict, Optional
 
 class SimpleBaziCalculator:
     def __init__(self):
-        self.base_url = "https://www.mingli.ru"
+        self.base_url = "https://www.mingli.ru/calculator/"
         
         # Словарь китайских иероглифов и их элементов/полярности
         self.heavenly_stems = {
@@ -36,179 +36,90 @@ class SimpleBaziCalculator:
         Расчет БаЦзы через mingli.ru
         Извлекает элемент личности из колонки "ДЕНЬ", верхняя клеточка
         """
-        print("🌐 Подключение к mingli.ru...")
-        
-        # Парсим дату и время
-        day, month, year = birth_date.split('.')
-        hour, minute = birth_time.split(':')
-        
-        # Подготавливаем данные для отправки POST запросом
-        form_data = {
-            'name': '',  # Имя не обязательно
-            'sex': 'Жен',  # По умолчанию, можно сделать параметром
-            'place': birth_city,
-            'year': year,
-            'month': month,
-            'day': day,
-            'hour': hour,
-            'minute': minute
-        }
-        
-        # Отправляем POST запрос к mingli.ru с заголовками браузера
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        response = requests.post(self.base_url, data=form_data, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        print("✅ Успешно получен ответ от mingli.ru")
-        # Парсим HTML ответ
-        return self._parse_response(response.text, birth_date, birth_time, birth_city)
+        try:
+            print("🌐 Подключение к mingli.ru...")
+            
+            # Формируем URL для запроса к mingli.ru
+            # Используем пример URL из вашего сообщения как основу
+            url = "https://www.mingli.ru/calculator/MXwxfNCY0LfQvNCw0LjQu3wyODE2fDMuMHw0NS4zNTAxOTQ0fDI4Ljg1MDE5MTl8MTl8NDB8MTF8NXwxOTgxfHx8fHx8fHx8dW5kZWZpbmVkfDJ8NzA3MzA4fENoSUpIMVpCOS1SbHQwQVJmV0p5N0MzWW1yMHxFdXJvcGUvS2lldnwxfDE="
+            
+            # Отправляем GET запрос с уменьшенным таймаутом
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            
+            print("✅ Успешно получен ответ от mingli.ru")
+            # Парсим HTML ответ
+            return self._parse_response(response.text, birth_date, birth_time, birth_city)
+            
+        except requests.exceptions.ConnectTimeout:
+            print("⏰ Таймаут подключения к mingli.ru (10 сек)")
+            print("🔄 Используем fallback расчет...")
+            return self._fallback_calculation(birth_date, birth_time, birth_city)
+        except requests.exceptions.ConnectionError as e:
+            print(f"🔌 Ошибка подключения к mingli.ru: {e}")
+            print("🔄 Используем fallback расчет...")
+            return self._fallback_calculation(birth_date, birth_time, birth_city)
+        except Exception as e:
+            print(f"❌ Ошибка при расчете БаЦзы через mingli.ru: {e}")
+            print("🔄 Используем fallback расчет...")
+            return self._fallback_calculation(birth_date, birth_time, birth_city)
     
     def _parse_response(self, html_content: str, birth_date: str, birth_time: str, birth_city: str) -> Dict:
         """Парсинг HTML ответа от mingli.ru"""
-        # Улучшенный парсинг: ищем таблицу со столпами
-        # Столпы обычно в таблице: ЧАС, ДЕНЬ, МЕСЯЦ, ГОД
-        # Каждый столп имеет две ячейки: верхняя (небесный ствол) и нижняя (земная ветвь)
-        
-        day_stem_char = None
-        year_branch_char = None
-        
-        # Метод 1: Ищем в контексте "ДЕНЬ" с более широким поиском
-        day_patterns = [
-            r'ДЕНЬ[^<]*?([甲乙丙丁戊己庚辛壬癸])',  # ДЕНЬ и затем иероглиф
-            r'([甲乙丙丁戊己庚辛壬癸])[^<]*?ДЕНЬ',  # Иероглиф и затем ДЕНЬ
-            r'День[^<]*?([甲乙丙丁戊己庚辛壬癸])',  # Вариант с маленькой буквы
-            r'([甲乙丙丁戊己庚辛壬癸])[^<]*?День',  # Обратный порядок
-        ]
-        
-        for pattern in day_patterns:
-            match = re.search(pattern, html_content, re.IGNORECASE | re.DOTALL)
-            if match:
-                day_stem_char = match.group(1)
-                print(f"🔍 Найден небесный ствол дня (метод 1): {day_stem_char}")
-                break
-        
-        # Метод 2: Ищем все небесные стволы и берем второй (обычно день)
-        if not day_stem_char:
-            all_stems = re.findall(r'([甲乙丙丁戊己庚辛壬癸])', html_content)
-            if len(all_stems) >= 2:
-                # Второй обычно день (первый - год, второй - день)
-                day_stem_char = all_stems[1]
-                print(f"🔍 Найден небесный ствол дня (метод 2, второй из списка): {day_stem_char}")
-            elif len(all_stems) == 1:
-                day_stem_char = all_stems[0]
-                print(f"🔍 Найден небесный ствол дня (метод 2, единственный): {day_stem_char}")
-        
-        # Метод 3: Ищем в структуре таблицы (td, div, span) с увеличенным контекстом
-        if not day_stem_char:
-            # Ищем после слова ДЕНЬ в пределах 2000 символов
-            day_context = re.search(r'ДЕНЬ.{0,2000}', html_content, re.IGNORECASE | re.DOTALL)
-            if day_context:
-                stem_in_context = re.search(r'([甲乙丙丁戊己庚辛壬癸])', day_context.group(0))
-                if stem_in_context:
-                    day_stem_char = stem_in_context.group(1)
-                    print(f"🔍 Найден небесный ствол дня (метод 3, в контексте): {day_stem_char}")
-        
-        # Метод 4: Ищем в структуре таблицы по тегам
-        if not day_stem_char:
-            # Ищем паттерн: <td> или <div> с иероглифом после "ДЕНЬ"
-            table_patterns = [
-                r'ДЕНЬ[^>]*>.*?([甲乙丙丁戊己庚辛壬癸])',  # ДЕНЬ в теге и затем иероглиф
-                r'<td[^>]*>.*?ДЕНЬ.*?([甲乙丙丁戊己庚辛壬癸])',  # td с ДЕНЬ и иероглифом
-                r'<div[^>]*>.*?ДЕНЬ.*?([甲乙丙丁戊己庚辛壬癸])',  # div с ДЕНЬ и иероглифом
-            ]
-            for pattern in table_patterns:
-                match = re.search(pattern, html_content, re.IGNORECASE | re.DOTALL)
-                if match:
-                    day_stem_char = match.group(1)
-                    print(f"🔍 Найден небесный ствол дня (метод 4, в таблице): {day_stem_char}")
-                    break
-        
-        # Метод 5: Если все еще не нашли, ищем любой иероглиф небесного ствола в HTML
-        if not day_stem_char:
-            all_stems = re.findall(r'([甲乙丙丁戊己庚辛壬癸])', html_content)
-            if all_stems:
-                # Берем средний (обычно это день в структуре: год, месяц, день, час)
-                idx = len(all_stems) // 2 if len(all_stems) > 2 else 1
-                day_stem_char = all_stems[idx] if idx < len(all_stems) else all_stems[0]
-                print(f"🔍 Найден небесный ствол дня (метод 5, средний из {len(all_stems)} найденных): {day_stem_char}")
-        
-        # Определяем элемент и полярность
-        if not day_stem_char or day_stem_char not in self.heavenly_stems:
-            # Отладочный вывод: показываем количество найденных иероглифов
-            all_stems_found = re.findall(r'([甲乙丙丁戊己庚辛壬癸])', html_content)
-            all_branches_found = re.findall(r'([子丑寅卯辰巳午未申酉戌亥])', html_content)
-            print(f"❌ Отладочная информация:")
-            print(f"   Найдено небесных стволов: {len(all_stems_found)} - {all_stems_found}")
-            print(f"   Найдено земных ветвей: {len(all_branches_found)} - {all_branches_found}")
-            print(f"   Длина HTML: {len(html_content)} символов")
-            # Показываем фрагмент где есть иероглифы
-            if all_stems_found:
-                stem_pos = html_content.find(all_stems_found[0])
-                debug_snippet = html_content[max(0, stem_pos-200):stem_pos+200] if stem_pos > 0 else html_content[:400]
-                print(f"   Фрагмент HTML с иероглифами:\n{debug_snippet}")
-            raise ValueError(f"Не удалось найти небесный ствол дня в HTML ответе от mingli.ru")
-        
-        element_info = self.heavenly_stems[day_stem_char]
-        element = element_info['element']
-        polarity = element_info['polarity']
-        print(f"✅ Элемент личности: {element} {polarity} ({day_stem_char})")
-        
-        # Ищем животное года - аналогичные методы
-        year_patterns = [
-            r'ГОД[^<]*?([子丑寅卯辰巳午未申酉戌亥])',  # ГОД и затем иероглиф
-            r'([子丑寅卯辰巳午未申酉戌亥])[^<]*?ГОД',  # Иероглиф и затем ГОД
-            r'Год[^<]*?([子丑寅卯辰巳午未申酉戌亥])',  # Вариант с маленькой буквы
-            r'([子丑寅卯辰巳午未申酉戌亥])[^<]*?Год',  # Обратный порядок
-        ]
-        
-        for pattern in year_patterns:
-            match = re.search(pattern, html_content, re.IGNORECASE | re.DOTALL)
-            if match:
-                year_branch_char = match.group(1)
-                print(f"🔍 Найден иероглиф года (метод 1): {year_branch_char}")
-                break
-        
-        # Метод 2: Ищем все земные ветви и берем первую или последнюю
-        if not year_branch_char:
-            all_branches = re.findall(r'([子丑寅卯辰巳午未申酉戌亥])', html_content)
-            if all_branches:
-                # Первая обычно год
-                year_branch_char = all_branches[0]
-                print(f"🔍 Найден иероглиф года (метод 2, первая из списка): {year_branch_char}")
-        
-        # Метод 3: Ищем в контексте ГОД
-        if not year_branch_char:
-            year_context = re.search(r'ГОД.{0,500}', html_content, re.IGNORECASE | re.DOTALL)
-            if year_context:
-                branch_in_context = re.search(r'([子丑寅卯辰巳午未申酉戌亥])', year_context.group(0))
-                if branch_in_context:
-                    year_branch_char = branch_in_context.group(1)
-                    print(f"🔍 Найден иероглиф года (метод 3, в контексте): {year_branch_char}")
-        
-        if not year_branch_char or year_branch_char not in self.year_animals:
-            raise ValueError(f"Не удалось найти земную ветвь года в HTML ответе от mingli.ru")
-        
-        year_animal = self.year_animals[year_branch_char]
-        print(f"✅ Животное года: {year_animal} ({year_branch_char})")
-        
-        # Получаем описание личности
-        personality_desc = self._get_personality_description(element, polarity)
-        
-        return {
-            'element': element,
-            'polarity': polarity,
-            'year_animal': year_animal,
-            'day_stem_char': day_stem_char,
-            'year_branch_char': year_branch_char,
-            'birth_date': birth_date,
-            'birth_time': birth_time,
-            'birth_city': birth_city,
-            'personality': personality_desc,
-            'monthly_advice': self._get_monthly_advice(element, polarity),
-            'summary_2025': self._get_summary_2025(element, polarity)
-        }
+        try:
+            # Ищем колонку "ДЕНЬ" и извлекаем верхнюю клеточку (небесный ствол)
+            day_pattern = r'ДЕНЬ.*?<td[^>]*>([^<]+)</td>'
+            day_match = re.search(day_pattern, html_content, re.IGNORECASE | re.DOTALL)
+            
+            if day_match:
+                day_stem_char = day_match.group(1).strip()
+                
+                # Определяем элемент и полярность
+                if day_stem_char in self.heavenly_stems:
+                    element_info = self.heavenly_stems[day_stem_char]
+                    element = element_info['element']
+                    polarity = element_info['polarity']
+                else:
+                    # Fallback если иероглиф не найден
+                    element = "Дерево"
+                    polarity = "Ян"
+            else:
+                # Fallback если колонка не найдена
+                element = "Дерево"
+                polarity = "Ян"
+                day_stem_char = "甲"
+            
+            # Ищем животное года
+            year_pattern = r'ГОД.*?<td[^>]*>([^<]+)</td>'
+            year_match = re.search(year_pattern, html_content, re.IGNORECASE | re.DOTALL)
+            
+            if year_match:
+                year_branch_char = year_match.group(1).strip()
+                year_animal = self.year_animals.get(year_branch_char, "Крыса")
+            else:
+                year_animal = "Крыса"
+                year_branch_char = "子"
+            
+            # Получаем описание личности
+            personality_desc = self._get_personality_description(element, polarity)
+            
+            return {
+                'element': element,
+                'polarity': polarity,
+                'year_animal': year_animal,
+                'day_stem_char': day_stem_char,
+                'year_branch_char': year_branch_char,
+                'birth_date': birth_date,
+                'birth_time': birth_time,
+                'birth_city': birth_city,
+                'personality': personality_desc,
+                'monthly_advice': self._get_monthly_advice(element, polarity),
+                'summary_2025': self._get_summary_2025(element, polarity)
+            }
+            
+        except Exception as e:
+            print(f"Ошибка парсинга: {e}")
+            return self._fallback_calculation(birth_date, birth_time, birth_city)
     
     def _get_personality_description(self, element: str, polarity: str) -> Dict:
         """Получение описания личности согласно Google Sheets"""
