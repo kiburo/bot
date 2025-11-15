@@ -3,4 +3,3 @@ python-dotenv==1.0.0
 pytz==2023.3
 requests==2.31.0
 gTTS==2.4.0
-psycopg[binary]==3.2.12
