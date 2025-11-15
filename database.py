@@ -41,7 +41,8 @@ class Database:
         ''')
         
         # Добавляем новые колонки если их нет (для обновления существующих БД)
-        for column in ['contact_name', 'contact_email', 'contact_phone']:
+        for column in ['contact_name', 'contact_email', 'contact_phone', 'bazi_data', 'personality_type']:
+            column_type = 'TEXT' if column in ['bazi_data'] else 'VARCHAR(255)'
             cursor.execute(f'''
                 DO $$ 
                 BEGIN
@@ -49,7 +50,7 @@ class Database:
                         SELECT 1 FROM information_schema.columns 
                         WHERE table_name='users' AND column_name='{column}'
                     ) THEN
-                        ALTER TABLE users ADD COLUMN {column} VARCHAR(255);
+                        ALTER TABLE users ADD COLUMN {column} {column_type};
                     END IF;
                 END $$;
             ''')
