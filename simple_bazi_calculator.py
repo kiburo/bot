@@ -65,103 +65,28 @@ class SimpleBaziCalculator:
             return self._fallback_calculation(birth_date, birth_time, birth_city)
     
     def _parse_response(self, html_content: str, birth_date: str, birth_time: str, birth_city: str) -> Dict:
-        """Парсинг HTML ответа от mingli.ru"""
+        """Парсинг HTML ответа от mingli.ru - всегда используем математический расчет для надежности"""
         try:
-            # Ищем колонку "ДЕНЬ" и извлекаем первый китайский иероглиф (небесный ствол)
-            # Ищем паттерн: ДЕНЬ, затем первый td с китайским иероглифом из небесных стволов
-            day_pattern = r'ДЕНЬ.*?<td[^>]*>([甲-癸])'
-            day_match = re.search(day_pattern, html_content, re.IGNORECASE | re.DOTALL)
+            # Всегда используем математический расчет для любой даты - это гарантирует правильность
+            print("🔢 Используем математический расчет по дате для точности...")
             
-            if day_match:
-                day_stem_char = day_match.group(1).strip()
-                print(f"🔍 Найден иероглиф из парсинга: {day_stem_char}")
-                
-                # Определяем элемент и полярность
-                if day_stem_char in self.heavenly_stems:
-                    element_info = self.heavenly_stems[day_stem_char]
-                    element = element_info['element']
-                    polarity = element_info['polarity']
-                    print(f"✅ Определен элемент: {element} {polarity}")
-                else:
-                    # Иероглиф не из списка небесных стволов - используем fallback расчет
-                    print(f"⚠️ Иероглиф {day_stem_char} не найден в списке небесных стволов, используем расчет по дате")
-                    try:
-                        date_parts = birth_date.split('.')
-                        if len(date_parts) == 3:
-                            day = int(date_parts[0])
-                            month = int(date_parts[1])
-                            year = int(date_parts[2])
-                            element, polarity, day_stem_char = self._calculate_day_stem(day, month, year)
-                            print(f"✅ Fallback расчет: {element} {polarity} ({day_stem_char})")
-                        else:
-                            element = "Дерево"
-                            polarity = "Ян"
-                            day_stem_char = "甲"
-                    except Exception as e:
-                        print(f"❌ Ошибка в fallback расчете: {e}")
-                        element = "Дерево"
-                        polarity = "Ян"
-            else:
-                # Пробуем альтернативный паттерн - ищем таблицу и первую ячейку в колонке ДЕНЬ
-                table_pattern = r'<tr[^>]*>.*?ДЕНЬ.*?</tr>.*?<tr[^>]*>.*?<td[^>]*>([甲-癸])'
-                table_match = re.search(table_pattern, html_content, re.IGNORECASE | re.DOTALL)
-                
-                if table_match:
-                    day_stem_char = table_match.group(1).strip()
-                    print(f"🔍 Найден иероглиф из альтернативного паттерна: {day_stem_char}")
-                    if day_stem_char in self.heavenly_stems:
-                        element_info = self.heavenly_stems[day_stem_char]
-                        element = element_info['element']
-                        polarity = element_info['polarity']
-                        print(f"✅ Определен элемент: {element} {polarity}")
-                    else:
-                        # Иероглиф не из списка - используем fallback расчет
-                        print(f"⚠️ Иероглиф {day_stem_char} не найден, используем расчет по дате")
-                        try:
-                            date_parts = birth_date.split('.')
-                            if len(date_parts) == 3:
-                                day = int(date_parts[0])
-                                month = int(date_parts[1])
-                                year = int(date_parts[2])
-                                element, polarity, day_stem_char = self._calculate_day_stem(day, month, year)
-                                print(f"✅ Fallback расчет: {element} {polarity} ({day_stem_char})")
-                            else:
-                                element = "Дерево"
-                                polarity = "Ян"
-                                day_stem_char = "甲"
-                        except Exception as e:
-                            print(f"❌ Ошибка в fallback расчете: {e}")
-                            element = "Дерево"
-                            polarity = "Ян"
-                else:
-                    # Fallback если колонка не найдена - используем расчет по дате
-                    try:
-                        # Парсим дату для расчета
-                        date_parts = birth_date.split('.')
-                        if len(date_parts) == 3:
-                            day = int(date_parts[0])
-                            month = int(date_parts[1])
-                            year = int(date_parts[2])
-                            element, polarity, day_stem_char = self._calculate_day_stem(day, month, year)
-                        else:
-                            element = "Дерево"
-                            polarity = "Ян"
-                            day_stem_char = "甲"
-                    except:
-                        element = "Дерево"
-                        polarity = "Ян"
-                        day_stem_char = "甲"
+            # Парсим дату для расчета
+            date_parts = birth_date.split('.')
+            if len(date_parts) != 3:
+                print("⚠️ Неверный формат даты, используем fallback")
+                return self._fallback_calculation(birth_date, birth_time, birth_city)
             
-            # Ищем животное года
-            year_pattern = r'ГОД.*?<td[^>]*>([^<]+)</td>'
-            year_match = re.search(year_pattern, html_content, re.IGNORECASE | re.DOTALL)
+            day = int(date_parts[0])
+            month = int(date_parts[1])
+            year = int(date_parts[2])
             
-            if year_match:
-                year_branch_char = year_match.group(1).strip()
-                year_animal = self.year_animals.get(year_branch_char, "Крыса")
-            else:
-                year_animal = "Крыса"
-                year_branch_char = "子"
+            # Расчет элемента личности по дню рождения
+            element, polarity, day_stem_char = self._calculate_day_stem(day, month, year)
+            print(f"✅ Расчет элемента: {element} {polarity} ({day_stem_char})")
+            
+            # Расчет животного года
+            year_animal, year_branch_char = self._calculate_year_animal(year)
+            print(f"✅ Расчет животного: {year_animal} ({year_branch_char})")
             
             # Получаем описание личности
             personality_desc = self._get_personality_description(element, polarity)
@@ -181,7 +106,7 @@ class SimpleBaziCalculator:
             }
             
         except Exception as e:
-            print(f"Ошибка парсинга: {e}")
+            print(f"❌ Ошибка в расчете: {e}")
             return self._fallback_calculation(birth_date, birth_time, birth_city)
     
     def _get_personality_description(self, element: str, polarity: str) -> Dict:
@@ -498,6 +423,29 @@ class SimpleBaziCalculator:
         
         return element, polarity, day_stem_char
     
+    def _calculate_year_animal(self, year: int) -> tuple:
+        """
+        Расчет животного года и земной ветви по году рождения
+        Китайский календарь: 1900 год = Крыса (子)
+        """
+        # Земные ветви: 子(0), 丑(1), 寅(2), 卯(3), 辰(4), 巳(5), 午(6), 未(7), 申(8), 酉(9), 戌(10), 亥(11)
+        branches = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥']
+        
+        # Животные года в том же порядке
+        animals = ['Крыса', 'Бык', 'Тигр', 'Кролик', 'Дракон', 'Змея', 
+                   'Лошадь', 'Коза', 'Обезьяна', 'Петух', 'Собака', 'Свинья']
+        
+        # Базовый год: 1900 = Крыса (индекс 0)
+        # Вычисляем индекс животного (цикл 12 лет)
+        animal_index = (year - 1900) % 12
+        if animal_index < 0:
+            animal_index += 12
+        
+        year_branch_char = branches[animal_index]
+        year_animal = animals[animal_index]
+        
+        return year_animal, year_branch_char
+    
     def _gregorian_to_julian_day(self, day: int, month: int, year: int) -> int:
         """
         Конвертация григорианской даты в юлианский день
@@ -539,7 +487,10 @@ class SimpleBaziCalculator:
             
             # Парсим дату рождения
             day, month, year = map(int, birth_date.split('.'))
-            year_animal = self._get_year_animal(year)
+            
+            # Расчет животного года
+            year_animal, year_branch_char = self._calculate_year_animal(year)
+            print(f"✅ Fallback расчет животного: {year_animal} ({year_branch_char})")
             
             # ПРАВИЛЬНОЕ определение элемента личности по ДНЮ рождения
             # Используем алгоритм определения небесного ствола дня
@@ -554,7 +505,7 @@ class SimpleBaziCalculator:
                 'polarity': polarity,
                 'year_animal': year_animal,
                 'day_stem_char': day_stem_char,
-                'year_branch_char': '子',
+                'year_branch_char': year_branch_char,
                 'birth_date': birth_date,
                 'birth_time': birth_time,
                 'birth_city': birth_city,
