@@ -2128,10 +2128,6 @@ async def _calculate_and_send_bazi(message: Message, birth_date: str, birth_time
         # Рассчитываем БаЦзы
         result = bazi_calc.calculate_bazi(birth_date, birth_time, birth_city)
         
-        # Сохраняем результат в базе данных
-        user_id = message.from_user.id
-        db.save_bazi_data(user_id, str(result))
-        
         # Отправляем результат пошагово
         await _send_bazi_result_step_by_step(message, result)
         
