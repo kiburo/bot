@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
+
+# Настройки базы данных PostgreSQL
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 # Настройки для БаЦзы
