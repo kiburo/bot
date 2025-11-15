@@ -44,19 +44,26 @@ class Database:
         ''')
         
         # Добавляем новые колонки если их нет (для обновления существующих БД)
+        # Используем отдельные транзакции для каждого ALTER TABLE
         try:
             cursor.execute('ALTER TABLE users ADD COLUMN contact_name VARCHAR(255)')
+            conn.commit()
         except errors.DuplicateColumn:
+            conn.rollback()  # Откатываем транзакцию после ошибки
             pass  # Колонка уже существует
         
         try:
             cursor.execute('ALTER TABLE users ADD COLUMN contact_email VARCHAR(255)')
+            conn.commit()
         except errors.DuplicateColumn:
+            conn.rollback()  # Откатываем транзакцию после ошибки
             pass  # Колонка уже существует
         
         try:
             cursor.execute('ALTER TABLE users ADD COLUMN contact_phone VARCHAR(255)')
+            conn.commit()
         except errors.DuplicateColumn:
+            conn.rollback()  # Откатываем транзакцию после ошибки
             pass  # Колонка уже существует
         
         # Таблица сессий
